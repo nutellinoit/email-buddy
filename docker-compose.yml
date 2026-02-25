@@ -1,0 +1,45 @@
+services:
+  email-buddy:
+    build: .
+    container_name: email-buddy
+    restart: unless-stopped
+
+    # Environment variables from .env file
+    env_file:
+      - .env
+
+    # Volumes for persistent data
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+
+    # API port (internal only, not exposed to host)
+    expose:
+      - "8000"
+
+    # Optional: Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  email-buddy-web:
+    build: ./web
+    container_name: email-buddy-web
+    restart: unless-stopped
+    ports:
+      - "3123:3000"
+    environment:
+      - API_URL=http://email-buddy:8000
+    depends_on:
+      - email-buddy

@@ -1,0 +1,53 @@
+[tools]
+python = "3.11"
+node = "22"
+
+[tasks.compile]
+description = "Verify all Python files compile without errors"
+run = "python -m compileall src/ tests/ -q"
+
+[tasks.build]
+description = "Build Docker image via docker compose"
+run = "docker compose build"
+
+[tasks.up]
+description = "Start all services"
+run = "docker compose up -d"
+
+[tasks.down]
+description = "Stop all services"
+run = "docker compose down"
+
+[tasks.logs]
+description = "Follow application logs"
+run = "docker compose logs -f email-buddy"
+
+[tasks.lint]
+description = "Run ruff linter checks"
+run = "ruff check src/ tests/"
+
+[tasks."lint:fix"]
+description = "Auto-fix lint issues and format code"
+run = "ruff check --fix src/ tests/ && ruff format src/ tests/"
+
+[tasks.security]
+description = "Run bandit SAST security scan"
+run = "bandit -r src/ -c pyproject.toml"
+
+[tasks.test]
+description = "Run test suite"
+run = "python -m pytest tests/ -v"
+
+[tasks."test:cov"]
+description = "Run tests with coverage report"
+run = "python -m pytest tests/ -v --cov=src --cov-report=term-missing"
+
+[tasks.readability]
+description = "Code readability analysis: complexity + maintainability index"
+run = """
+echo '=== Cyclomatic Complexity (C or worse) ==='
+radon cc src/ -s -n C
+echo ''
+echo '=== Maintainability Index ==='
+radon mi src/ -s
+"""

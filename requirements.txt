@@ -1,0 +1,22 @@
+# Email-Buddy Requirements
+# Core dependencies for email processing and AI classification
+
+# Unified LLM gateway (Ollama, LM Studio, OpenAI, etc.)
+litellm>=1.40.0
+
+# Structured LLM output with automatic retry
+instructor>=1.3.0
+
+# Configuration and data models
+pydantic>=2.6.0
+pydantic-settings>=2.2.0
+
+# Email parsing and handling (built-in modules used: imaplib, email, ssl)
+# No additional email libraries needed
+
+# Logging, JSON, datetime, etc. are built-in Python modules
+# No additional dependencies required for core functionality
+
+# Read-only API for web dashboard
+fastapi>=0.115.0
+uvicorn>=0.32.0
