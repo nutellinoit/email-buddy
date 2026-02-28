@@ -150,38 +150,41 @@ class DailySummaryGenerator:
             language = config.DAILY_SUMMARY_LANGUAGE
 
             system_prompt = (
-                "You are a personal email assistant. "
                 f"You MUST respond entirely in {language}. "
-                "You are given today's email list and statistics from Email-Buddy, "
-                "an automated email classifier.\n"
-                "Write 3-5 concise bullet points as a helpful assistant would. Focus on:\n"
-                "- Important emails classified as 'regular' that the user should read or reply to\n"
-                "- Emails that might have been misclassified "
-                "(low confidence, unusual sender for the category)\n"
-                "- Notable patterns (new senders, recurring topics)\n"
-                "Be specific: mention sender names and email subjects. "
-                "Write naturally, as if briefing a colleague. "
-                "Do NOT use labels like 'ATTENTION' or 'WARNING'.\n"
-                "Use plain text bullet points starting with '- '."
+                "You are the user's personal email assistant. "
+                "Write a short, natural message summarizing what arrived in their inbox — "
+                "as if you were sending them a quick chat message.\n\n"
+                "Focus almost entirely on regular (personal/important) emails. "
+                "Mention the most interesting ones by sender name.\n"
+                "Spam and newsletters are not interesting — at most a passing mention "
+                "like \"plus the usual spam and newsletters\". "
+                "Do NOT list or describe individual spam or newsletter emails.\n\n"
+                "If something looks misclassified, mention it naturally.\n\n"
+                "Keep it to 2-4 sentences. "
+                "Do NOT use bullet points, numbered lists, or any structured format. "
+                "Do NOT give orders or instructions. "
+                "Do NOT mention confidence scores, statistics, or technical details. "
+                "Just write a brief, friendly paragraph."
             )
 
             # Build stats representation
-            parts = [
-                f"Today's statistics:\n"
-                f"Total emails processed: {stats['total_processed']}\n"
-                f"By classification: {stats.get('by_classification', {})}\n"
-                f"Average confidence: {stats.get('average_confidence', {})}\n"
-                f"Top senders: {stats.get('top_senders', {})}\n"
-                f"Learning entries: {stats.get('learning_entries', 0)}"
-            ]
+            parts = [f"Today's email activity ({stats['total_processed']} emails):"]
+            by_class = stats.get("by_classification", {})
+            avg_conf = stats.get("average_confidence", {})
+            for cls, count in by_class.items():
+                avg = avg_conf.get(cls, 0)
+                parts.append(f"  {cls}: {count} emails (avg confidence {avg:.0%})")
+            learning = stats.get("learning_entries", 0)
+            if learning > 0:
+                parts.append(f"User corrections today: {learning}")
 
             # Add individual email details for personalized tips
             if recent_emails:
                 parts.append("\nRecent emails processed today:")
                 for email in recent_emails:
                     parts.append(
-                        f"  - [{email.classification}] (conf: {email.confidence:.2f}) "
-                        f"From: {email.sender} | Subject: {email.subject}"
+                        f"  - [{email.classification}] From: {email.sender} | "
+                        f"Subject: {email.subject} | Why: {email.reason}"
                     )
 
             # Add previous summaries for cross-referencing
@@ -311,7 +314,7 @@ class DailySummaryGenerator:
             '  <td style="background-color:#EFF6FF;padding:24px 26px;">\n'
             '    <p style="font-size:12px;font-weight:600;color:#2563EB;'
             'text-transform:uppercase;letter-spacing:1px;margin:0 0 12px;">'
-            'Tips &amp; Alerts</p>\n'
+            'Your assistant</p>\n'
             f'    <div style="font-size:14px;color:#1E40AF;line-height:1.6;">'
             f'{content}</div>\n'
             '  </td>\n'

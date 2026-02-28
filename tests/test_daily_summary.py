@@ -283,13 +283,13 @@ class TestRenderHtml:
         html = generator._render_html(ctx, "- Check the 3 spam emails from today.")
         assert "<!DOCTYPE html>" in html
         assert "10" in html
-        assert "Tips" in html
+        assert "Your assistant" in html
         assert "Check the 3 spam emails" in html
         assert "Email-Buddy" in html
         assert "alice@example.com" in html
         assert "Spam" in html
-        # Tips section appears BEFORE stats
-        assert html.index("Tips") < html.index("Total Emails Processed")
+        # Assistant section appears BEFORE stats
+        assert html.index("Your assistant") < html.index("Total Emails Processed")
         # Markdown bullets converted to HTML list
         assert "<li" in html
         assert "<ul" in html
