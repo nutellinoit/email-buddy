@@ -1,33 +1,24 @@
+# Production deployment — uses pre-built images from GitHub Container Registry.
+# Replace the image tag below with the desired release version.
+# Available tags: https://github.com/nutellinoit/email-buddy/releases
+
 services:
   email-buddy:
-    build:
-      context: .
-      args:
-        BUILD_VERSION: "${APP_VERSION:-dev}"
+    image: ghcr.io/nutellinoit/email-buddy:v1.0.0  # ← set your version here
     container_name: email-buddy
     restart: unless-stopped
-
-    # Environment variables from .env file
     env_file:
       - .env
-
-    # Volumes for persistent data
     volumes:
       - ./data:/app/data
-
-    # API port (internal only, not exposed to host)
     expose:
       - "8000"
-
-    # Optional: Resource limits
     deploy:
       resources:
         limits:
           memory: 512M
         reservations:
           memory: 256M
-
-    # Health check
     healthcheck:
       test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
       interval: 30s
@@ -36,7 +27,7 @@ services:
       start_period: 10s
 
   email-buddy-web:
-    build: ./web
+    image: ghcr.io/nutellinoit/email-buddy-web:v1.0.0  # ← same version
     container_name: email-buddy-web
     restart: unless-stopped
     ports:
