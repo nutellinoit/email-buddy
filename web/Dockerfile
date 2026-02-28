@@ -29,4 +29,7 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
+LABEL org.opencontainers.image.source="https://github.com/nutellinoit/email-buddy"
+LABEL org.opencontainers.image.description="Email-Buddy — web dashboard"
+
 CMD ["node", "server.js"]

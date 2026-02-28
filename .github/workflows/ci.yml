@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: jdx/mise-action@v2
+        with:
+          cache: true
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ hashFiles('requirements-dev.txt') }}
+          restore-keys: pip-
+
+      - name: Install dev dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Compile check
+        run: mise run compile
+
+      - name: Lint
+        run: mise run lint
+
+      - name: Security scan
+        run: mise run security
+
+      - name: Ensure no .env file leaks into CI
+        run: |
+          if [ -f .env ]; then
+            echo "::error::.env file found — tests must not depend on it"
+            exit 1
+          fi
+
+      - name: Tests
+        run: mise run test
