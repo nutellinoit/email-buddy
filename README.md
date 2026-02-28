@@ -15,12 +15,14 @@ It runs as a Docker container in daemon mode (with configurable interval or IMAP
 - Structured LLM output with schema validation and automatic retry via [Instructor][instructor]
 - IMAP IDLE for real-time new-email detection (falls back to polling)
 - Adaptive learning from user corrections (folder reconciliation)
-- Daily HTML summary email with LLM-generated personalized tips, delivered via IMAP APPEND
+- Daily HTML summary email with LLM-generated conversational overview, delivered via IMAP APPEND
 - Email backup to disk before IMAP moves (safety net against data loss)
 - Category folders as INBOX subfolders (auto-detected hierarchy separator)
 - Content-based deduplication with SQLite tracking
 - Web dashboard with REST API for monitoring
 - Dry run mode for safe testing
+
+> **Warning:** The web dashboard and REST API have no authentication. Do not expose them to the public internet without a reverse proxy or VPN.
 
 ## Quick Start
 
@@ -46,6 +48,24 @@ mise run up        # docker compose up -d
 mise run logs      # follow logs
 mise run down      # stop
 ```
+
+## Production Deployment
+
+For production, use pre-built images from GitHub Container Registry instead of building locally:
+
+1. Download `docker-compose.prod.yml` and `.env.example` from the repository
+2. Copy `.env.example` to `.env` and configure your settings
+3. Edit the image tags in `docker-compose.prod.yml` to the desired release version
+4. Run `docker compose -f docker-compose.prod.yml up -d`
+
+To update: change the image tag in `docker-compose.prod.yml`, then:
+
+```bash
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
+```
+
+Available versions: [Releases](https://github.com/nutellinoit/email-buddy/releases).
 
 ## Configuration
 
@@ -77,7 +97,7 @@ All settings are configured via environment variables in `.env`. See [`.env.exam
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `EMAIL_LIMIT` | Emails to process per cycle | `5` |
-| `EMAIL_FETCH_DAYS` | How far back to search for unprocessed emails | `7` |
+| `EMAIL_FETCH_DAYS` | Days back to search for unprocessed emails (also defines the retry window for failed classifications) | `7` |
 | `PROCESS_INTERVAL` | Seconds between cycles (0 = one-shot) | `3600` |
 | `IDLE_ENABLED` | Use IMAP IDLE instead of polling | `true` |
 | `MARK_AS_READ_WHEN_MOVE` | Mark emails as read when moving to category folders | `true` |
@@ -88,7 +108,6 @@ All settings are configured via environment variables in `.env`. See [`.env.exam
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `DATABASE_PATH` | SQLite database path | `/app/data/email_buddy.db` |
-| `MAX_FETCH_BATCH` | Max emails to fetch in one batch | `50` |
 | `EMAIL_RETENTION_DAYS` | Days to keep processed emails in DB (0 = forever) | `365` |
 | `LOG_LEVEL` | Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL) | `INFO` |
 
@@ -148,13 +167,15 @@ Processing flow:
 2. Classify each email via LLM with confidence scoring and sender history
 3. Optionally save a raw .eml backup to disk (if `EMAIL_BACKUP_ENABLED=true`)
 4. Move emails above the confidence threshold to the configured IMAP folder
-5. If LLM is unavailable, skip the email and retry next cycle
+5. If LLM is unavailable, the email is skipped and automatically retried on the next cycle (as long as it remains within the `EMAIL_FETCH_DAYS` window)
 6. Scan folders for user corrections and generate learning rules
 7. Wait for next cycle (IMAP IDLE or sleep)
 
 ## Categories
 
 Categories are fully configurable via the `CATEGORIES` environment variable (JSON array). Each category defines a name, target IMAP folder, confidence threshold, and a description that the LLM uses for classification. Exactly one category must be marked as default (emails stay in INBOX).
+
+> **Note:** `EMAIL_FETCH_DAYS` defines the time window for automatic categorization: only emails received within this window are considered for classification. Emails older than this are ignored. This same window acts as a natural retry mechanism — if the LLM is temporarily unavailable, unprocessed emails are retried on every cycle until they age out of the window.
 
 Default configuration:
 
@@ -219,7 +240,7 @@ When enabled (`DAILY_SUMMARY_ENABLED=true`), Email-Buddy generates a daily HTML 
 The summary includes:
 - Classification statistics for the past 24 hours
 - Per-category breakdown and top senders
-- LLM-generated personalized tips based on individual email details (sender, subject, confidence)
+- LLM-generated conversational overview of what arrived (focused on actionable emails, not raw numbers)
 
 Configure the delivery hour with `DAILY_SUMMARY_HOUR` and the tips language with `DAILY_SUMMARY_LANGUAGE`.
 
@@ -249,17 +270,31 @@ See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for setup instructions, available
 
 ## Troubleshooting
 
-**IMAP connection fails** — Verify host, port, and credentials. Gmail requires an [app password][gmail-app-pw], not your regular password.
+### `Connection refused` or IMAP timeout
 
-**LLM not available** — Check that `LITELLM_API_BASE` is reachable and the model is loaded. Email-Buddy skips emails when the LLM is down and retries next cycle.
+The IMAP server is unreachable. Verify `IMAP_HOST` and `IMAP_PORT`. If you use Gmail, you need an [app password][gmail-app-pw] — regular passwords are rejected when 2FA is enabled.
 
-**No emails processed** — Check `EMAIL_FETCH_DAYS` (default: 7 days back). Increase `EMAIL_LIMIT` if needed. Already-processed emails are tracked in the database.
+### `LLM capability check failed` at startup
 
-**Learning not working** — Move a misclassified email to the correct folder. The system detects the correction on the next reconciliation cycle. Check `LEARNING_ENABLED=true` and inspect logs with `mise run logs`.
+The startup probe sends a structured-output request to the LLM. If the model does not support tool/function calling (required for schema-validated responses), the process exits immediately. Switch to a compatible model — e.g., `ollama/llama3.1:8b`.
 
-**Startup probe fails** — The configured model does not support structured output. Try a different model (e.g., `ollama/llama3.1:8b`).
+### LLM unreachable during normal operation
 
-Enable debug logging for detailed output:
+If the LLM goes down after startup, Email-Buddy does **not** stop. It skips the email (returns it to the unprocessed pool) and retries automatically on the next processing cycle. This continues as long as the email stays within the `EMAIL_FETCH_DAYS` window. No manual intervention is needed — once the LLM is back, pending emails are processed normally.
+
+### No emails are being processed
+
+- `EMAIL_FETCH_DAYS` (default: 7) defines how far back the system looks. Emails older than this window are ignored.
+- Already-processed emails are tracked in the SQLite database and won't be picked up again.
+- Increase `EMAIL_LIMIT` if you have a large backlog.
+
+### Learning corrections are not detected
+
+Move a misclassified email to the correct IMAP folder. The system detects the discrepancy on the next reconciliation cycle and generates a learning rule. Verify that `LEARNING_ENABLED=true` and check logs for reconciliation activity.
+
+### Debug logging
+
+Enable verbose output to diagnose any issue:
 ```env
 LOG_LEVEL=DEBUG
 ```
