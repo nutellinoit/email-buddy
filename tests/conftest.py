@@ -1,6 +1,32 @@
 """Shared fixtures for Email-Buddy test suite."""
 
+import json
+
 import pytest
+
+# Default categories matching src/config.py defaults — pinned here so tests
+# are isolated from the user's .env file.
+_DEFAULT_CATEGORIES = [
+    {
+        "name": "spam",
+        "folder": "Suspicious",
+        "threshold": 0.7,
+        "description": "Unwanted, fraudulent, or malicious emails including phishing, scams, and unsolicited messages",
+    },
+    {
+        "name": "newsletter",
+        "folder": "Newsletters",
+        "threshold": 0.7,
+        "description": "Legitimate promotional and marketing emails including company newsletters, product announcements, and subscription content",
+    },
+    {
+        "name": "regular",
+        "folder": "",
+        "threshold": 0.5,
+        "description": "Personal and important emails including work correspondence, transactional notifications, and anything requiring personal attention",
+        "is_default": True,
+    },
+]
 
 
 @pytest.fixture(autouse=True)
@@ -13,6 +39,13 @@ def test_env(monkeypatch):
     monkeypatch.setenv("LITELLM_API_KEY", "not-needed")
     monkeypatch.setenv("LITELLM_TIMEOUT", "300")
     monkeypatch.setenv("DATABASE_PATH", ":memory:")
+    monkeypatch.setenv("CATEGORIES", json.dumps(_DEFAULT_CATEGORIES))
+
+    # Rebuild the module-level config singleton so code that imports it
+    # (e.g. LearningProcessor, LearningData) sees the test values.
+    import src.config
+
+    monkeypatch.setattr(src.config, "config", src.config.Config())
 
 
 @pytest.fixture
