@@ -22,9 +22,12 @@ It runs as a Docker container in daemon mode (with configurable interval or IMAP
 - Web dashboard with REST API for monitoring
 - Dry run mode for safe testing
 
-> **Warning:** The web dashboard and REST API have no authentication. Do not expose them to the public internet without a reverse proxy or VPN.
+> [!CAUTION]
+> The web dashboard and REST API have **no authentication**. Do not expose them to the public internet without a reverse proxy or VPN.
 
-## Quick Start
+## Quick Start (Development)
+
+Clone the repository and build locally. For production deployment with pre-built images, see [Production Deployment](#production-deployment).
 
 ```bash
 # Configure
