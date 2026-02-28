@@ -1,10 +1,10 @@
 # Production deployment — uses pre-built images from GitHub Container Registry.
-# Replace the image tag below with the desired release version.
+# For reproducible deploys, pin to an exact version instead of "latest".
 # Available tags: https://github.com/nutellinoit/email-buddy/releases
 
 services:
   email-buddy:
-    image: ghcr.io/nutellinoit/email-buddy:v1.0.0  # ← set your version here
+    image: ghcr.io/nutellinoit/email-buddy:latest  # ← pin to a version, e.g. v1.0.0
     container_name: email-buddy
     restart: unless-stopped
     env_file:
@@ -27,7 +27,7 @@ services:
       start_period: 10s
 
   email-buddy-web:
-    image: ghcr.io/nutellinoit/email-buddy-web:v1.0.0  # ← same version
+    image: ghcr.io/nutellinoit/email-buddy-web:latest  # ← pin to a version, e.g. v1.0.0
     container_name: email-buddy-web
     restart: unless-stopped
     ports:

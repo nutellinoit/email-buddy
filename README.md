@@ -55,10 +55,10 @@ For production, use pre-built images from GitHub Container Registry instead of b
 
 1. Download `docker-compose.prod.yml` and `.env.example` from the repository
 2. Copy `.env.example` to `.env` and configure your settings
-3. Edit the image tags in `docker-compose.prod.yml` to the desired release version
+3. (Optional) Pin the image tags in `docker-compose.prod.yml` to a specific version for reproducible deploys
 4. Run `docker compose -f docker-compose.prod.yml up -d`
 
-To update: change the image tag in `docker-compose.prod.yml`, then:
+To update:
 
 ```bash
 docker compose -f docker-compose.prod.yml pull
