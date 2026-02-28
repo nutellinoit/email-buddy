@@ -4,6 +4,7 @@ Main email processing logic for configurable email classification and management
 
 import logging
 import os
+import time as _time
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -51,7 +52,7 @@ class EmailProcessor:
         Returns:
             Dictionary containing processing statistics and results
         """
-        logger.info("Starting email processing...")
+        logger.debug("Starting email processing...")
 
         # Reset stats
         self.stats = self._build_initial_stats()
@@ -83,14 +84,14 @@ class EmailProcessor:
                     email_data = client.get_next_unprocessed_email(self.db_manager)
 
                     if not email_data:
-                        logger.info(f"No more unprocessed emails found after processing {processed_count}")
+                        logger.debug(f"No more unprocessed emails found after processing {processed_count}")
                         break
 
                     # Process this email atomically: classify -> move -> save
                     success = self._process_single_email_atomic(email_data)
                     if success:
                         processed_count += 1
-                        logger.info(f"Successfully processed email {processed_count}/{max_emails}")
+                        logger.debug(f"Successfully processed email {processed_count}/{max_emails}")
                     else:
                         logger.warning("Failed to process email, but continuing...")
 
@@ -104,7 +105,7 @@ class EmailProcessor:
             self._process_learning_workflow()
 
             result_msg = f"Email processing completed - processed {processed_count} emails"
-            logger.info(result_msg)
+            logger.debug(result_msg)
             return self._get_results("completed", result_msg)
 
         except Exception as e:
@@ -120,10 +121,12 @@ class EmailProcessor:
             sender = email_data.get("sender", "Unknown Sender")
             is_unread = email_data.get("is_unread", False)
 
-            logger.info(f"Processing email {email_id}: '{subject}' from {sender} (unread: {is_unread})")
+            logger.debug(f"Processing email {email_id}: '{subject}' from {sender} (unread: {is_unread})")
 
-            # Classify email immediately after fetch
+            # Classify email immediately after fetch (measure LLM time)
+            classify_start = _time.time()
             classification_result = self.email_classifier.classify_with_fallback(email_data)
+            classify_elapsed = _time.time() - classify_start
 
             # Handle classification failure (None return)
             if classification_result is None:
@@ -151,24 +154,34 @@ class EmailProcessor:
 
             if cat_config.is_default or not cat_config.folder:
                 # Default category: leave in inbox
-                logger.info(f"Email {email_id} classified as {category} - left in inbox")
+                logger.debug(f"Email {email_id} classified as {category} - left in inbox")
                 move_success = True
                 folder_moved_to = None
+                action = "left in INBOX"
             elif confidence >= cat_config.threshold:
                 # Non-default category with sufficient confidence: move to target folder
                 move_success, folder_moved_to, backup_path = self._handle_email_move_atomic(
                     email_data, cat_config.folder, category, confidence, reason
                 )
+                action = f"moved to {cat_config.folder}" if move_success else "MOVE FAILED"
             else:
                 # Below threshold: treat as default
                 default_name = config.default_category.name
-                logger.info(
+                logger.debug(
                     f"Email {email_id} classified as {category} but below threshold "
                     f"({confidence:.2f} < {cat_config.threshold}) - treating as {default_name}"
                 )
                 move_success = True
                 folder_moved_to = None
                 category = default_name
+                action = "below threshold, left in INBOX"
+
+            # Consolidated per-email log (2 lines)
+            sender_short = sender.split("<")[0].strip() if "<" in sender else sender
+            logger.info(f"  {email_id[:8]} \"{subject[:60]}\" from {sender_short}")
+            logger.info(
+                f"    \u2192 {category.upper()} ({confidence:.2f}, {classify_elapsed:.1f}s) \u2192 {action}"
+            )
 
             # Only save as processed if the entire operation succeeded
             if move_success:
@@ -176,7 +189,7 @@ class EmailProcessor:
                     email_data, category, confidence, reason, folder_moved_to, backup_path
                 )
                 if self.db_manager.save_processed_email(processed_email):
-                    logger.info(f"Email {email_id} successfully processed and saved to database")
+                    logger.debug(f"Email {email_id} successfully processed and saved to database")
                     return True
                 else:
                     logger.error(f"Failed to save processed email {email_id} to database")
@@ -215,13 +228,13 @@ class EmailProcessor:
             # Mark as read in INBOX before moving if configured
             if config.MARK_AS_READ_WHEN_MOVE and email_data.get("is_unread", False):
                 if self.email_client.mark_as_read(email_data, config.INBOX_FOLDER):
-                    logger.info(f"Marked {category} email {email_id} as read before moving")
+                    logger.debug(f"Marked {category} email {email_id} as read before moving")
                 else:
                     logger.warning(f"Failed to mark {category} email {email_id} as read before moving")
 
             # Attempt atomic move with flag preservation
             if self.email_client.move_email(email_data, destination_folder):
-                logger.info(f"Moved {category} email {email_id} to {destination_folder}")
+                logger.debug(f"Moved {category} email {email_id} to {destination_folder}")
                 moved_key = f"{category}_moved"
                 if moved_key in self.stats:
                     self.stats[moved_key] += 1
@@ -264,7 +277,7 @@ class EmailProcessor:
             with open(file_path, "wb") as f:
                 f.write(raw_bytes)
 
-            logger.info(f"Backup saved: {file_path} ({len(raw_bytes)} bytes)")
+            logger.debug(f"Backup saved: {file_path} ({len(raw_bytes)} bytes)")
             return file_path
 
         except Exception as e:
@@ -277,7 +290,7 @@ class EmailProcessor:
             if not config.LEARNING_ENABLED:
                 return
 
-            logger.info("Running folder reconciliation...")
+            logger.debug("Running folder reconciliation...")
 
             learning_results = self.learning_processor.reconcile_folders()
 
@@ -286,11 +299,12 @@ class EmailProcessor:
                 self.stats["learning_generated"] = learning_results.get("learning_generated", 0)
                 self.stats["learning_errors"] = learning_results.get("errors", 0)
 
-                if learning_results.get("learning_generated", 0) > 0:
-                    logger.info(
-                        f"Folder reconciliation completed: "
-                        f"{learning_results.get('learning_generated', 0)} learning summaries generated"
-                    )
+                generated = learning_results.get("learning_generated", 0)
+                corrections = learning_results.get("corrections_found", 0)
+                if generated > 0:
+                    logger.info(f"Reconciliation: {corrections} corrections, {generated} learning rules generated")
+                else:
+                    logger.info("Reconciliation: no corrections")
             else:
                 if learning_results.get("status") != "skipped":
                     self.stats["learning_errors"] += 1

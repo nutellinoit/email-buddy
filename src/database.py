@@ -654,7 +654,10 @@ class EmailDatabaseManager:
                 deleted_count = cursor.rowcount
                 conn.commit()
 
-                logger.info(f"Cleaned up {deleted_count} old learning records older than {days_to_keep} days")
+                if deleted_count > 0:
+                    logger.info(f"Cleaned up {deleted_count} old learning records older than {days_to_keep} days")
+                else:
+                    logger.debug(f"No old learning records to clean up (retention: {days_to_keep} days)")
                 return deleted_count
 
         except Exception as e:
@@ -702,9 +705,12 @@ class EmailDatabaseManager:
                         logger.warning(f"Failed to delete backup file {path}: {e}")
 
                 if files_deleted > 0:
-                    logger.info(f"Deleted {files_deleted} backup .eml files")
+                    logger.debug(f"Deleted {files_deleted} backup .eml files")
 
-                logger.info(f"Cleaned up {deleted_count} old records older than {days_to_keep} days")
+                if deleted_count > 0:
+                    logger.info(f"Cleaned up {deleted_count} old records older than {days_to_keep} days")
+                else:
+                    logger.debug(f"No old records to clean up (retention: {days_to_keep} days)")
                 return deleted_count
 
         except Exception as e:

@@ -34,7 +34,7 @@ class EmailClient:
     def connect(self) -> bool:
         """Connect to IMAP server."""
         try:
-            logger.info(
+            logger.debug(
                 f"Connecting to IMAP server {config.IMAP_HOST}:{config.IMAP_PORT}"
             )
 
@@ -63,7 +63,7 @@ class EmailClient:
                     self.imap_client
                 )
 
-            logger.info("Successfully connected to IMAP server")
+            logger.debug("Successfully connected to IMAP server")
             return True
 
         except Exception as e:
@@ -75,7 +75,7 @@ class EmailClient:
         if self.imap_client and self.connected:
             try:
                 imap_ops.disconnect(self.imap_client)
-                logger.info("Disconnected from IMAP server")
+                logger.debug("Disconnected from IMAP server")
             except Exception as e:
                 logger.error(f"Error disconnecting from IMAP server: {e}")
             finally:
@@ -96,7 +96,7 @@ class EmailClient:
         if self.is_connection_alive():
             return True
 
-        logger.info("IMAP connection is stale, reconnecting...")
+        logger.debug("IMAP connection is stale, reconnecting...")
 
         # Clean up stale connection
         self.connected = False
@@ -121,14 +121,14 @@ class EmailClient:
             datetime.now() - self._connection_time
         ).total_seconds()
         if connection_age > 300:  # 5 minutes
-            logger.info(
+            logger.debug(
                 f"Connection is {connection_age:.0f} seconds old, should refresh"
             )
             return True
 
         # Refresh if we've done many operations
         if self._operations_count > 50:
-            logger.info(
+            logger.debug(
                 f"Performed {self._operations_count} operations, should refresh"
             )
             return True
@@ -138,7 +138,7 @@ class EmailClient:
     def refresh_connection_if_needed(self) -> bool:
         """Refresh connection if it's getting stale."""
         if self.should_refresh_connection():
-            logger.info("Refreshing IMAP connection proactively")
+            logger.debug("Refreshing IMAP connection proactively")
             current_folder = self._current_folder
 
             # Disconnect and reconnect
@@ -223,9 +223,9 @@ class EmailClient:
             return False
 
         try:
-            logger.info(f"Checking if folder '{folder_name}' exists using LIST command")
+            logger.debug(f"Checking if folder '{folder_name}' exists using LIST command")
             exists = imap_ops.folder_exists(self.imap_client, folder_name)
-            logger.info(
+            logger.debug(
                 f"Folder '{folder_name}' {'exists' if exists else 'does not exist'}"
             )
             return exists
@@ -262,7 +262,7 @@ class EmailClient:
 
             email_ids = result[1][0].split()
             if not email_ids:
-                logger.info("No emails found in current folder")
+                logger.debug("No emails found in current folder")
                 return []
 
             # Calculate slice indices for recent emails with offset
@@ -345,7 +345,7 @@ class EmailClient:
                 # Check if already processed using database (with header data only)
                 if not db_manager.is_email_processed(header_data):
                     # Now fetch the full email since it's unprocessed
-                    logger.info(
+                    logger.debug(
                         f"Found unprocessed email: {header_data.get('subject', 'No Subject')[:50]}..."
                     )
                     email_data = imap_ops.fetch_email_full(
@@ -362,7 +362,7 @@ class EmailClient:
                         f"Skipping processed email: {header_data.get('content_id', 'unknown')[:8]}..."
                     )
 
-            logger.info("No unprocessed emails found in the last 7 days")
+            logger.info(f"All {len(email_ids)} emails already processed")
             return None
 
         except Exception as e:
@@ -517,7 +517,7 @@ class EmailClient:
                 self.imap_client, imap_uid, folder
             )
             if success:
-                logger.info(
+                logger.debug(
                     f"Marked email {content_id[:8] if len(content_id) > 8 else content_id}... "
                     f"as read in folder {folder or 'current'}"
                 )
@@ -548,7 +548,7 @@ class EmailClient:
                 )
                 if uid_list:
                     fresh_uid = uid_list[0].decode()
-                    logger.info(
+                    logger.debug(
                         f"Found fresh UID {fresh_uid} for message_id {message_id}"
                     )
                     return fresh_uid
@@ -562,12 +562,12 @@ class EmailClient:
                 )
                 if uid_list:
                     fresh_uid = uid_list[0].decode()
-                    logger.info(
+                    logger.debug(
                         f"Found fresh UID {fresh_uid} by subject/sender search"
                     )
                     return fresh_uid
 
-            logger.warning(
+            logger.debug(
                 f"Could not find fresh UID for email "
                 f"{email_data.get('content_id', 'unknown')}"
             )
@@ -613,18 +613,18 @@ class EmailClient:
                     and isinstance(email_data, dict)
                     and email_data
                 ):
-                    logger.info(
+                    logger.debug(
                         f"Attempt {attempt + 1}: Getting fresh UID for email {content_id}"
                     )
                     fresh_uid = self.get_fresh_uid_by_content(email_data)
                     if fresh_uid and fresh_uid != imap_uid:
                         imap_uid = fresh_uid
-                        logger.info(
+                        logger.debug(
                             f"Using fresh UID {imap_uid} for email {content_id} "
                             f"(attempt {attempt + 1})"
                         )
 
-                logger.info(
+                logger.debug(
                     f"Starting atomic move of email {content_id} "
                     f"(UID {imap_uid}) to folder '{destination_folder}' "
                     f"(attempt {attempt + 1})"
@@ -632,7 +632,7 @@ class EmailClient:
 
                 # Ensure destination folder exists
                 if not self.folder_exists(destination_folder):
-                    logger.info(
+                    logger.debug(
                         f"Folder '{destination_folder}' doesn't exist, creating it..."
                     )
                     if not self.create_folder(destination_folder):
@@ -655,12 +655,12 @@ class EmailClient:
                     )
                     if success:
                         self._operations_count += 3  # append, store, expunge
-                        logger.info(
+                        logger.debug(
                             f"Successfully moved email {content_id} using APPEND method"
                         )
                         return True
                     else:
-                        logger.warning(
+                        logger.debug(
                             f"APPEND method failed for email {content_id}, "
                             f"trying COPY method"
                         )
@@ -671,14 +671,14 @@ class EmailClient:
                 )
                 if success:
                     self._operations_count += 4  # copy, store flags, store deleted, expunge
-                    logger.info(
+                    logger.debug(
                         f"Successfully moved email {content_id} using COPY method"
                     )
                     return True
 
                 # If we get here, both methods failed
                 if attempt < max_retries:
-                    logger.warning(
+                    logger.debug(
                         f"Both APPEND and COPY methods failed for email {content_id}, "
                         f"retrying (attempt {attempt + 1})"
                     )
@@ -706,7 +706,7 @@ class EmailClient:
                     ]
                 ):
                     if attempt < max_retries:
-                        logger.info(
+                        logger.debug(
                             f"UID-related error in atomic move, will retry "
                             f"with fresh UID lookup (attempt {attempt + 1})"
                         )
@@ -715,7 +715,7 @@ class EmailClient:
                     err in error_msg.lower()
                     for err in ["socket", "eof", "connection"]
                 ) and attempt < max_retries:
-                    logger.info(
+                    logger.debug(
                         f"Connection error detected in atomic move, "
                         f"retrying (attempt {attempt + 1})"
                     )

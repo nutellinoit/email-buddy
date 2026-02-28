@@ -40,7 +40,7 @@ class LearningProcessor:
             logger.info("Learning system disabled, skipping folder reconciliation")
             return self._get_stats("disabled", "Learning system is disabled")
 
-        logger.info("Starting folder reconciliation...")
+        logger.debug("Starting folder reconciliation...")
         self._reset_stats()
 
         try:
@@ -67,7 +67,7 @@ class LearningProcessor:
             corrections = self._find_corrections(recent_emails, all_folder_emails, folder_to_class)
 
             if not corrections:
-                logger.debug("No folder corrections detected")
+                logger.info("No folder corrections detected")
                 return self._get_stats("completed", "No corrections found")
 
             logger.info(f"Found {len(corrections)} folder correction(s)")
@@ -243,7 +243,7 @@ class LearningProcessor:
 
             if self.db_manager.save_learning_data(learning_data):
                 self.stats["learning_generated"] += 1
-                logger.info(f"Learning saved for {message_id}: {learning_type}")
+                logger.debug(f"Learning saved for {message_id}: {learning_type}")
             else:
                 self.stats["errors"] += 1
                 logger.error(f"Failed to save learning for {message_id}")
@@ -274,7 +274,7 @@ class LearningProcessor:
             if config.LEARNING_RETENTION_DAYS > 0:
                 deleted_count = self.db_manager.cleanup_old_learning(config.LEARNING_RETENTION_DAYS)
                 if deleted_count > 0:
-                    logger.info(f"Cleaned up {deleted_count} old learning records")
+                    logger.debug(f"Cleaned up {deleted_count} old learning records")
         except Exception as e:
             logger.error(f"Error cleaning up old learning data: {e}")
 

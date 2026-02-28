@@ -19,7 +19,7 @@ class EmailClassifier:
 
     def __init__(self):
         self.db_manager = get_database_manager()
-        logger.info(f"EmailClassifier using {get_model_name()}")
+        logger.debug(f"EmailClassifier using {get_model_name()}")
 
     def is_available(self) -> bool:
         """Check if the LLM provider is available."""
@@ -40,7 +40,7 @@ class EmailClassifier:
         email_id = email_data.get("id", "unknown")
 
         try:
-            logger.info(f"Starting LLM classification for email {email_id} - Model: {get_model_name()}")
+            logger.debug(f"Starting LLM classification for email {email_id} - Model: {get_model_name()}")
 
             email_content = self._prepare_email_content(email_data)
             prompt = self._create_enhanced_classification_prompt(email_content)
@@ -56,7 +56,7 @@ class EmailClassifier:
             )
 
             elapsed_time = time.time() - start_time
-            logger.info(f"LLM API call completed in {elapsed_time:.2f}s for email {email_id}")
+            logger.debug(f"LLM API call completed in {elapsed_time:.2f}s for email {email_id}")
 
             if result:
                 logger.info(
